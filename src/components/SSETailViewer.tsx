@@ -12,6 +12,7 @@ import {
   IconButton,
   Paper,
   Divider,
+  Autocomplete,
 } from '@mui/material';
 import {
   PlayArrow,
@@ -19,7 +20,12 @@ import {
   Clear,
   Download,
   Circle,
+  Add as AddIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 interface SSEMessage {
   id: string;
@@ -27,6 +33,13 @@ interface SSEMessage {
   data: string;
   event?: string;
   retry?: number;
+}
+
+interface SSEParameters {
+  connection: string;
+  date: Date | null;
+  tags: number[];
+  search: string;
 }
 
 interface SSETailViewerProps {
@@ -49,10 +62,45 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [connectionCount, setConnectionCount] = useState(0);
   const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const [newTagInput, setNewTagInput] = useState('');
+
+  // SSE Parameters
+  const [parameters, setParameters] = useState<SSEParameters>({
+    connection: '',
+    date: new Date(),
+    tags: [],
+    search: '',
+  });
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Available connection types
+  const availableConnections = ['websocket', 'http', 'grpc', 'tcp', 'redis', 'mqtt'];
+
+  // Build URL with query parameters
+  const buildUrl = useCallback((params: SSEParameters): string => {
+    const url = new URL(endpoint, window.location.origin);
+    
+    if (params.connection) {
+      url.searchParams.set('connection', params.connection);
+    }
+    
+    if (params.date) {
+      url.searchParams.set('date', params.date.toISOString().split('T')[0]);
+    }
+    
+    if (params.tags.length > 0) {
+      url.searchParams.set('tags', params.tags.join(','));
+    }
+    
+    if (params.search) {
+      url.searchParams.set('search', params.search);
+    }
+    
+    return url.toString();
+  }, [endpoint]);
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = useCallback(() => {
@@ -83,8 +131,8 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
     setError(null);
 
     try {
-      // Construct URL with Last-Event-ID if available
-      const url = new URL(endpoint, window.location.origin);
+      // Build URL with parameters and Last-Event-ID if available
+      const url = new URL(buildUrl(parameters), window.location.origin);
       if (lastEventId) {
         url.searchParams.set('lastEventId', lastEventId);
       }
@@ -158,7 +206,7 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
       setError(err instanceof Error ? err.message : 'Failed to connect');
       setIsConnecting(false);
     }
-  }, [endpoint, lastEventId, addMessage]);
+  }, [buildUrl, parameters, lastEventId, addMessage]);
 
   // Disconnect from SSE endpoint
   const disconnect = useCallback(() => {
@@ -278,6 +326,155 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
             {isConnected ? 'Disconnect' : 'Connect'}
           </Button>
         </Box>
+
+        {/* SSE Parameters */}
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              Query Parameters
+            </Typography>
+            <Box display="flex" flexWrap="wrap" gap={2}>
+              <Box sx={{ minWidth: 200 }}>
+                <Autocomplete
+                  size="small"
+                  options={availableConnections}
+                  value={parameters.connection}
+                  onChange={(_, newValue) => {
+                    const newParams = { ...parameters, connection: newValue || '' };
+                    setParameters(newParams);
+                    if (isConnected) {
+                      disconnect();
+                      setTimeout(() => connect(), 100);
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Connection"
+                      placeholder="Select connection type"
+                    />
+                  )}
+                />
+              </Box>
+              
+              <Box sx={{ minWidth: 200 }}>
+                <DatePicker
+                  label="Date"
+                  value={parameters.date}
+                  onChange={(newDate) => {
+                    if (newDate) {
+                      const newParams = { ...parameters, date: newDate };
+                      setParameters(newParams);
+                      if (isConnected) {
+                        disconnect();
+                        setTimeout(() => connect(), 100);
+                      }
+                    }
+                  }}
+                  slotProps={{
+                    textField: {
+                      size: 'small',
+                      fullWidth: true,
+                    },
+                  }}
+                />
+              </Box>
+              
+              <Box sx={{ minWidth: 200 }}>
+                <TextField
+                  size="small"
+                  label="Add Tag"
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && newTagInput.trim()) {
+                      const tagNum = parseInt(newTagInput.trim());
+                      if (!isNaN(tagNum) && !parameters.tags.includes(tagNum)) {
+                        const newParams = { 
+                          ...parameters, 
+                          tags: [...parameters.tags, tagNum].sort((a, b) => a - b) 
+                        };
+                        setParameters(newParams);
+                        setNewTagInput('');
+                        if (isConnected) {
+                          disconnect();
+                          setTimeout(() => connect(), 100);
+                        }
+                      }
+                    }
+                  }}
+                  placeholder="Enter tag number"
+                  InputProps={{
+                    endAdornment: (
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          if (newTagInput.trim()) {
+                            const tagNum = parseInt(newTagInput.trim());
+                            if (!isNaN(tagNum) && !parameters.tags.includes(tagNum)) {
+                              const newParams = { 
+                                ...parameters, 
+                                tags: [...parameters.tags, tagNum].sort((a, b) => a - b) 
+                              };
+                              setParameters(newParams);
+                              setNewTagInput('');
+                              if (isConnected) {
+                                disconnect();
+                                setTimeout(() => connect(), 100);
+                              }
+                            }
+                          }
+                        }}
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    ),
+                  }}
+                />
+                <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {parameters.tags.map((tag) => (
+                    <Chip
+                      key={tag}
+                      label={tag}
+                      size="small"
+                      onDelete={() => {
+                        const newParams = { 
+                          ...parameters, 
+                          tags: parameters.tags.filter(t => t !== tag) 
+                        };
+                        setParameters(newParams);
+                        if (isConnected) {
+                          disconnect();
+                          setTimeout(() => connect(), 100);
+                        }
+                      }}
+                      deleteIcon={<DeleteIcon />}
+                    />
+                  ))}
+                </Box>
+              </Box>
+              
+              <Box sx={{ minWidth: 200 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Search"
+                  value={parameters.search}
+                  onChange={(e) => {
+                    const newParams = { ...parameters, search: e.target.value };
+                    setParameters(newParams);
+                    // Debounce the reconnection for search
+                    if (isConnected) {
+                      disconnect();
+                      setTimeout(() => connect(), 500);
+                    }
+                  }}
+                  placeholder="Search term"
+                />
+              </Box>
+            </Box>
+          </Box>
+        </LocalizationProvider>
 
         {/* Error Display */}
         {error && (
