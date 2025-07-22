@@ -1,22 +1,20 @@
-import { useState } from 'react'
+import { useAuth0 } from '@auth0/auth0-react'
 import {
   Container,
   Box,
   Typography,
-  Button,
   Card,
   CardContent,
   Avatar,
-  Chip,
-  Fab,
   ThemeProvider,
   createTheme,
   CssBaseline,
+  CircularProgress,
 } from '@mui/material'
-import { Login, Logout, Add } from '@mui/icons-material'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
-import AuthDialog from './components/AuthDialog'
+import Auth0LoginButton from './components/Auth0LoginButton'
+import YARPCDashboard from './components/YARPCDashboard'
 
 // Create a Material-UI theme
 const theme = createTheme({
@@ -31,31 +29,42 @@ const theme = createTheme({
 });
 
 function App() {
-  const [count, setCount] = useState(0)
-  const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [currentUser, setCurrentUser] = useState('')
+  const { isAuthenticated, isLoading } = useAuth0()
 
-  const handleLogin = async (username: string, password: string) => {
-    // Simulate API call
-    return new Promise<void>((resolve, reject) => {
-      setTimeout(() => {
-        // Simple validation for demo - replace with real authentication
-        if (username === 'admin' && password === 'password') {
-          setIsLoggedIn(true)
-          setCurrentUser(username)
-          resolve()
-        } else {
-          reject(new Error('Invalid username or password'))
-        }
-      }, 1000)
-    })
+  // Show loading spinner while Auth0 is initializing
+  if (isLoading) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Container maxWidth="sm" sx={{ py: 4 }}>
+          <Box 
+            display="flex" 
+            flexDirection="column" 
+            alignItems="center" 
+            justifyContent="center" 
+            minHeight="60vh"
+          >
+            <CircularProgress size={48} sx={{ mb: 2 }} />
+            <Typography variant="h6" color="text.secondary">
+              Loading...
+            </Typography>
+          </Box>
+        </Container>
+      </ThemeProvider>
+    )
   }
 
-  const handleLogout = () => {
-    setIsLoggedIn(false)
-    setCurrentUser('')
+  // If authenticated, show the YARPC Dashboard
+  if (isAuthenticated) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <YARPCDashboard />
+      </ThemeProvider>
+    )
   }
+
+  // If not authenticated, show the login page
 
   return (
     <ThemeProvider theme={theme}>
@@ -75,7 +84,10 @@ function App() {
             />
           </Box>
           <Typography variant="h3" component="h1" gutterBottom>
-            Vite + React
+            Welcome to YARPC
+          </Typography>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            Yet Another Remote Procedure Call Platform
           </Typography>
         </Box>
         
@@ -83,91 +95,14 @@ function App() {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Authentication Status
+              Authentication Required
             </Typography>
-            {isLoggedIn ? (
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box display="flex" alignItems="center" gap={2}>
-                  <Chip 
-                    label={`Welcome, ${currentUser}!`} 
-                    color="success" 
-                    variant="filled"
-                  />
-                </Box>
-                <Button 
-                  variant="outlined" 
-                  startIcon={<Logout />}
-                  onClick={handleLogout}
-                >
-                  Logout
-                </Button>
-              </Box>
-            ) : (
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Chip 
-                  label="You are not logged in" 
-                  color="default" 
-                  variant="outlined"
-                />
-                <Button 
-                  variant="contained" 
-                  startIcon={<Login />}
-                  onClick={() => setIsAuthDialogOpen(true)}
-                >
-                  Login
-                </Button>
-              </Box>
-            )}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Please log in to access the YARPC Dashboard and manage your RPC services.
+            </Typography>
+            <Auth0LoginButton />
           </CardContent>
         </Card>
-        
-        <Card>
-          <CardContent>
-            <Box textAlign="center">
-              <Typography variant="h4" gutterBottom>
-                Count: {count}
-              </Typography>
-              <Button 
-                variant="contained" 
-                size="large"
-                onClick={() => setCount((count) => count + 1)}
-                sx={{ mb: 2 }}
-              >
-                Increment Counter
-              </Button>
-              <Typography variant="body2" color="text.secondary">
-                Edit <code>src/App.tsx</code> and save to test HMR
-              </Typography>
-            </Box>
-          </CardContent>
-        </Card>
-        
-        <Typography 
-          variant="body2" 
-          color="text.secondary" 
-          textAlign="center" 
-          mt={3}
-        >
-          Click on the Vite and React logos to learn more
-        </Typography>
-        
-        {/* Floating Action Button */}
-        <Fab 
-          color="primary" 
-          aria-label="add"
-          sx={{ position: 'fixed', bottom: 16, right: 16 }}
-          onClick={() => setCount(count + 1)}
-        >
-          <Add />
-        </Fab>
-        
-        {/* Authentication Dialog */}
-        <AuthDialog
-          isOpen={isAuthDialogOpen}
-          onClose={() => setIsAuthDialogOpen(false)}
-          onLogin={handleLogin}
-          title="Login to Your Account"
-        />
       </Container>
     </ThemeProvider>
   )
