@@ -23,9 +23,6 @@ import {
   Add as AddIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 interface SSEMessage {
   id: string;
@@ -37,7 +34,7 @@ interface SSEMessage {
 
 interface SSEParameters {
   connection: string;
-  date: Date | null;
+  date: string;
   tags: number[];
   search: string;
 }
@@ -67,7 +64,7 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
   // SSE Parameters
   const [parameters, setParameters] = useState<SSEParameters>({
     connection: '',
-    date: new Date(),
+    date: '',
     tags: [],
     search: '',
   });
@@ -76,8 +73,9 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Available connection types
+  // Available connection types and dates
   const availableConnections = ['websocket', 'http', 'grpc', 'tcp', 'redis', 'mqtt'];
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
 
   // Build URL with query parameters
   const buildUrl = useCallback((params: SSEParameters): string => {
@@ -88,7 +86,7 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
     }
     
     if (params.date) {
-      url.searchParams.set('date', params.date.toISOString().split('T')[0]);
+      url.searchParams.set('date', params.date);
     }
     
     if (params.tags.length > 0) {
@@ -101,6 +99,25 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
     
     return url.toString();
   }, [endpoint]);
+
+  // Fetch available dates from the API
+  useEffect(() => {
+    const fetchDates = async () => {
+      try {
+        const response = await fetch('/dates');
+        if (response.ok) {
+          const dates = await response.json();
+          setAvailableDates(dates);
+        } else {
+          console.warn('Failed to fetch dates from /dates endpoint');
+        }
+      } catch (error) {
+        console.error('Error fetching dates:', error);
+      }
+    };
+
+    fetchDates();
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = useCallback(() => {
@@ -328,57 +345,56 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
         </Box>
 
         {/* SSE Parameters */}
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <Box>
-            <Typography variant="subtitle2" gutterBottom>
-              Query Parameters
-            </Typography>
-            <Box display="flex" flexWrap="wrap" gap={2}>
-              <Box sx={{ minWidth: 200 }}>
-                <Autocomplete
-                  size="small"
-                  options={availableConnections}
-                  value={parameters.connection}
-                  onChange={(_, newValue) => {
-                    const newParams = { ...parameters, connection: newValue || '' };
-                    setParameters(newParams);
-                    if (isConnected) {
-                      disconnect();
-                      setTimeout(() => connect(), 100);
-                    }
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Connection"
-                      placeholder="Select connection type"
-                    />
-                  )}
-                />
-              </Box>
-              
-              <Box sx={{ minWidth: 200 }}>
-                <DatePicker
-                  label="Date"
-                  value={parameters.date}
-                  onChange={(newDate) => {
-                    if (newDate) {
-                      const newParams = { ...parameters, date: newDate };
-                      setParameters(newParams);
-                      if (isConnected) {
-                        disconnect();
-                        setTimeout(() => connect(), 100);
-                      }
-                    }
-                  }}
-                  slotProps={{
-                    textField: {
-                      size: 'small',
-                      fullWidth: true,
-                    },
-                  }}
-                />
-              </Box>
+        <Box>
+          <Typography variant="subtitle2" gutterBottom>
+            Query Parameters
+          </Typography>
+          <Box display="flex" flexWrap="wrap" gap={2}>
+            <Box sx={{ minWidth: 200 }}>
+              <Autocomplete
+                size="small"
+                options={availableConnections}
+                value={parameters.connection}
+                onChange={(_, newValue) => {
+                  const newParams = { ...parameters, connection: newValue || '' };
+                  setParameters(newParams);
+                  if (isConnected) {
+                    disconnect();
+                    setTimeout(() => connect(), 100);
+                  }
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Connection"
+                    placeholder="Select connection type"
+                  />
+                )}
+              />
+            </Box>
+            
+            <Box sx={{ minWidth: 200 }}>
+              <Autocomplete
+                size="small"
+                options={availableDates}
+                value={parameters.date}
+                onChange={(_, newValue) => {
+                  const newParams = { ...parameters, date: newValue || '' };
+                  setParameters(newParams);
+                  if (isConnected) {
+                    disconnect();
+                    setTimeout(() => connect(), 100);
+                  }
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Date"
+                    placeholder="Select date"
+                  />
+                )}
+              />
+            </Box>
               
               <Box sx={{ minWidth: 200 }}>
                 <TextField
@@ -474,7 +490,6 @@ export const SSETailViewer: React.FC<SSETailViewerProps> = ({
               </Box>
             </Box>
           </Box>
-        </LocalizationProvider>
 
         {/* Error Display */}
         {error && (
